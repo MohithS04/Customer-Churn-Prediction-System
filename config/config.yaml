@@ -1,0 +1,174 @@
+# System Configuration File
+
+data_sources:
+  customer_service:
+    enabled: true
+    source_type: "api_webhook"
+    update_frequency: "realtime"
+    batch_size: 100
+    
+  stb_telemetry:
+    enabled: true
+    source_type: "mqtt_stream"
+    update_frequency: "5min"
+    batch_size: 1000
+    
+  web_analytics:
+    enabled: true
+    source_type: "api_stream"
+    update_frequency: "realtime"
+    batch_size: 500
+    
+  billing:
+    enabled: true
+    source_type: "cdc"
+    update_frequency: "realtime"
+    batch_size: 200
+    
+  crm:
+    enabled: true
+    source_type: "api_batch"
+    update_frequency: "daily"
+    schedule: "02:00"
+
+feature_store:
+  online_store:
+    type: "redis"
+    ttl_seconds: 3600
+    
+  offline_store:
+    type: "postgres"
+    schema: "features"
+    
+  feature_groups:
+    - name: "customer_demographics"
+      ttl_days: 365
+    - name: "customer_behavior"
+      ttl_days: 90
+    - name: "service_quality"
+      ttl_days: 30
+    - name: "billing_history"
+      ttl_days: 365
+
+ml_pipeline:
+  training:
+    frequency: "weekly"
+    schedule: "sunday_02:00"
+    cross_validation_folds: 5
+    test_size: 0.2
+    
+  models:
+    - name: "xgboost_churn"
+      type: "xgboost"
+      hyperparameters:
+        max_depth: 6
+        learning_rate: 0.1
+        n_estimators: 100
+        subsample: 0.8
+        
+    - name: "lightgbm_churn"
+      type: "lightgbm"
+      hyperparameters:
+        max_depth: 7
+        learning_rate: 0.05
+        n_estimators: 150
+        num_leaves: 31
+        
+  evaluation:
+    metrics:
+      - "roc_auc"
+      - "precision"
+      - "recall"
+      - "f1_score"
+      - "precision_at_k"
+    k_values: [100, 500, 1000]
+    
+  deployment:
+    shadow_mode_duration_hours: 24
+    rollout_percentage: 10
+    performance_threshold_auc: 0.85
+
+prediction_api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  timeout_seconds: 30
+  rate_limit_per_minute: 1000
+  batch_size: 100
+  
+  endpoints:
+    - path: "/predict/churn"
+      method: "POST"
+      description: "Real-time churn prediction"
+      
+    - path: "/predict/batch"
+      method: "POST"
+      description: "Batch churn prediction"
+      
+    - path: "/predictions/history"
+      method: "GET"
+      description: "Get prediction history"
+
+retention_actions:
+  risk_thresholds:
+    low: 0.0
+    medium: 0.3
+    high: 0.6
+    critical: 0.8
+    
+  action_types:
+    discount:
+      max_discount_percent: 25
+      min_customer_value: 50
+      
+    upgrade:
+      eligible_segments: ["residential", "small_business"]
+      
+    service_call:
+      trigger_conditions:
+        - risk_level: "critical"
+        - days_since_last_interaction: 7
+          
+    loyalty_reward:
+      min_tenure_months: 12
+      
+  campaign_budget:
+    daily_limit: 10000
+    per_customer_limit: 100
+
+data_quality:
+  validation_rules:
+    completeness_threshold: 0.95
+    freshness_threshold_minutes: 10
+    accuracy_threshold: 0.98
+    
+  alerts:
+    enabled: true
+    channels:
+      - "slack"
+      - "email"
+    thresholds:
+      data_drift_psi: 0.2
+      volume_anomaly_percent: 20
+
+monitoring:
+  metrics:
+    - name: "prediction_latency_ms"
+      type: "histogram"
+      buckets: [10, 50, 100, 200, 500]
+      
+    - name: "prediction_volume"
+      type: "counter"
+      
+    - name: "model_accuracy"
+      type: "gauge"
+      
+    - name: "data_pipeline_lag_seconds"
+      type: "gauge"
+      
+  dashboards:
+    - name: "system_health"
+      refresh_interval_seconds: 30
+      
+    - name: "business_metrics"
+      refresh_interval_seconds: 60
